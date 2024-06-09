@@ -3,10 +3,15 @@ const express = require('express');
 const app = express();
 const cookieParser = require('cookie-parser');
 const mongoose = require('mongoose');
-const connectDb = require('./config/connectDb');
+const connectDb = require('./src/config/connectDb');
+const cors = require('cors');
+const corsOptions = require('./src/config/corsOptions');
 
 //connect to database
 connectDb();
+
+//use cors
+app.use(cors(corsOptions));
 
 //middleware for urlencoded data
 app.use(express.urlencoded({ extended: true }));
@@ -16,6 +21,17 @@ app.use(express.json());
 
 //middleware for cookie
 app.use(cookieParser());
+
+app.use((req, res, next) => {
+    console.log(`${req.method} request for '${req.url}'`);
+    next();
+});
+
+app.use('/subjects',require('./src/routes/api/subject'));
+app.use('/tutors',require('./src/routes/api/tutor'));
+app.use('/sessions',require('./src/routes/api/session'));
+app.use('/hours', require('./src/routes/api/hours'));
+
 
 
 mongoose.connection.once(
