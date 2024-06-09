@@ -2,9 +2,9 @@
   "name": "sstc-backend",
   "version": "1.0.0",
   "description": "backend for sstc app",
-  "main": "index.js",
+  "main": "api.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest --runInBand"
   },
   "repository": {
     "type": "git",
@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/Mulcro/sstc-backend#readme",
   "dependencies": {
+    "@types/jest": "^29.5.12",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
@@ -24,6 +25,10 @@
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.3.2",
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }
