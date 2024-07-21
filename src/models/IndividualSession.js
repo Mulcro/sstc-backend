@@ -13,7 +13,7 @@ const sessionSchema = new Schema({
         required: true
     },
     student: {
-        type: Schema.Types.ObjectId,
+        type: [Schema.Types.ObjectId],
         ref: 'Student',
         required: true
     },
@@ -22,17 +22,22 @@ const sessionSchema = new Schema({
         ref: 'Subject',
         required: true
     },
+    language:{
+        type:Schema.Types.ObjectId,
+        ref:'Language',
+        required:true
+    },
     //TO-DO: The time isn't returning to the frontend in the proper format. 
     startTime: {
         type: Date,
-        required: true,
-        default: () => new Date()// Default to current time when session is created
+        default: null
     },
 
     //TO-DO: I need to figure out how to make sure that even though the sessions are timed it possible to have the actual end be the time that the student actually checks in with another student.
 
     expectedEnd: {
-        type: Date
+        type: Date,
+        default:null
     },
     actualEnd:{
         type: Date,
@@ -41,17 +46,36 @@ const sessionSchema = new Schema({
     active:{
         type: Boolean,
         default: true
+    },
+    extended:{
+        type:Boolean,
+        default: false
+    },
+    paused:{
+        type:Boolean,
+        default:false
+    },
+    timePaused:{
+        type:Date,
+        default:null
+    },
+    timeResumed:{
+        type:Date,
+        default:null
     }
 });
 
-sessionSchema.pre('save',function (next) {
+// sessionSchema.pre('save',function (next) {
     
-    const startTime = new Date(this.startTime);
-    const expectedEnd = new Date(startTime.getTime() + (2*60*1000));
+//     if(this.startTime && (this.expectedEnd === null) ){        
+//         const startTime = new Date(this.startTime);
+//         //Change this to 30 minutes when in prod
+//         const expectedEnd = new Date(startTime.getTime() + (2*60*1000));
 
-    this.expectedEnd = expectedEnd;
+//         this.expectedEnd = expectedEnd;
+//     }
 
-    next();
-})
+//     next();
+// })
 
-module.exports = mongoose.model('Session', sessionSchema);
+module.exports = mongoose.model('IndividualSession', sessionSchema);

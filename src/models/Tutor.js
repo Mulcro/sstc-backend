@@ -1,6 +1,10 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
+class tutorStatus {
+
+}
+
 //TO-DO: need to be able to mark a tutor as sick maybe
 const tutorSchema = new Schema({
     firstName: {
@@ -23,7 +27,7 @@ const tutorSchema = new Schema({
     },
     session: {
         type: mongoose.Types.ObjectId,
-        ref: 'Session'
+        ref: 'IndividualSession'
     },
     shifts:{
             monday:{
@@ -51,6 +55,10 @@ const tutorSchema = new Schema({
 
             }
     },
+    atGroup:{
+        type: Boolean,
+        default:false
+    },
     onBreak: {
         type: Boolean,
         default: false
@@ -63,7 +71,6 @@ const tutorSchema = new Schema({
         type: Boolean,
         default: false  
     },
-    //TO-DO: Need to prevent this from being longer than 3 objects
     studentsInQueue: {
         type: [Object],
         ref: 'Student'
