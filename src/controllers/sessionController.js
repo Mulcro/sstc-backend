@@ -1,56 +1,133 @@
 const Tutor = require('../models/Tutor');
 const Student = require('../models/Student');
-const Session = require('../models/Session');
+const IndividualSession = require('../models/IndividualSession');
+const GroupSession = require('../models/GroupSession');
+const GroupTable = require('../models/GroupTable');
+
+//TO-DO: Need to prevent students from being in multiple sessions at a time
 
 //Create Session
-
-
-    //TO-DO: Need to implement queue for students waiting for a tutor that isn't available yet
-
-    //TO-DO: Need to implement session timer
-
-    //TO-DO: Need to implement logic to not allow a tutor to be in multiple sessions at once
-
-    //TO-DO: Need functionality to extend a session
-
-const createSession = async (req, res) => {
+const createGroupSession = async (req,res) => {
     console.log(req.body)
-    if(!req.body.tutorId || !req.body.subjectId || !req.body.studentFirstName || !req.body.studentLastName || !req.body.type || !req.body.startTime) return res.status(400).json({message:"Missing Parameters"
+    if(!req.body.studentId || !req.body.groupTableId || !req.body.subjectId || !req.body.type) return res.status(400).json({message: "Bad request"})
+    try{
+        const {firstName,lastName,studentId,groupTableId,subjectId,type,language} = req.body;
+        
+        let student = await Student.findOne({ studentId });
+        // Check if student exists; if not, create and save
+            //Went through the hassle of doing this so I can query sessions by student if ever needed
+        if(student){
+            const isStudentInIndividualSession = await IndividualSession.find({student: student._id});
+            const isStudentInGroupSession = await GroupSession.find({studentId: student._id});
+
+            if(isStudentInGroupSession && isStudentInIndividualSession){
+                console.log("Student in Session: " + (isStudentInGroupSession && isStudentInIndividualSession));
+                return res.status(409).json({message: "Student is in Session"})
+            }
+        }
+        else if (!student) {
+            const createdStudent = await Student.create({
+                firstName,
+                lastName,
+                studentId
+            });
+
+            const savedStudent = await createdStudent.save();
+
+            if (!savedStudent) {
+                return res.status(500).send("Failed to save student");
+            }
+
+            student = savedStudent;
+        }
+
+        const groupSession = await GroupSession.create({
+            studentId: student._id,
+            groupTableId,
+            subjectId,
+            type,
+            startTime: Date.now(),
+            language
+        })
+        
+        await groupSession.save();
+
+        return res.status(200).json(groupSession)
+        
+    }
+    catch(err){
+        console.log(err)
+        return res.status(500).json({ message: err._message });
+    }
+}
+
+//TO-DO: Need functionality for group sessions
+
+//TO-DO: Need to add ability to be able to read array of users for session with multiple students.
+const createIndividualSession = async (req, res) => {
+    console.log('Req body: ' + req.body)
+    if(!req.body.students || !req.body.tutorId || !req.body.subjectId || !req.body.type || !req.body.language) return res.status(400).json({message:"Missing Parameters"
     })
     try{
+        const studentArr = req.body.students
         const {tutorId} = req.body;
 
-        const tutorInSession = await Session.findOne({tutorId:tutorId, active: true});
+        console.log("Students: " + JSON.stringify(studentArr))
+        const tutorInSession = await IndividualSession.findOne({tutorId:tutorId, active: true});
 
 
         if(tutorInSession) return res.status(409).json({message: "Tutor already in session"});
-        const studentId = parseInt(req.body.studentId);
 
-        let studentObjectId;
+        const {subjectId, studentFirstName, type, studentLastName, language} = req.body;
 
+        let studentIdArr = [];
+        studentArr.forEach((obj) => {
+            studentIdArr.push(parseInt(obj.studentId));
+        })
         
-        studentObjectId = await Student.findOne({studentId})._id;
-
+        let studentObjectIds = [];
         
-        const {subjectId, startTime, studentFirstName, type, studentLastName} = req.body;
+        //Array.prototype.forEach doesn't not wait for asychronous operations so using loop here
 
+        for (let i = 0; i < studentIdArr.length; i++) {
+            try {
+                const studentObject = await Student.findOne({ studentId: studentIdArr[i] });
 
-        //Went through the hassle of doing this so I can query sessions by student if ever needed
-        if(!studentObjectId){
-            const createdUser = await Student.create({
-                firstName: studentFirstName,
-                lastName: studentLastName,
-                studentId
-            })
+                // Check if student exists; if not, create and save
+                    //Went through the hassle of doing this so I can query sessions by student if ever needed
+                if (!studentObject) {
+                    const createdStudent = await Student.create({
+                        firstName: studentArr[i].firstName,
+                        lastName: studentArr[i].lastName,
+                        studentId: studentIdArr[i]
+                    });
 
-            const savedStudent = await createdUser.save()
-            if(!savedStudent) return res.status(500)
+                    const savedStudent = await createdStudent.save();
+                    if (!savedStudent) {
+                        return res.status(500).send("Failed to save student");
+                    }
 
-            studentObjectId = savedStudent._id;
+                    // Push the newly created student's _id to studentObjectIds
+                    studentObjectIds.push(savedStudent._id); // Assuming savedStudent has _id
+                } else {
+                    // If student exists, push their _id to studentObjectIds
+                    studentObjectIds.push(studentObject._id);
+                }
+            }     
+            catch (error) {
+                console.error("Error processing student:", error);
+                return res.status(500).send("Error processing student");
+            }
         }
-        
-
-        const session = await Session.create({ type, tutorId, student:studentObjectId, subjectId, startTime});
+    
+        console.log(`Student Object Ids: ${studentObjectIds}`)
+        const session = await IndividualSession.create({ 
+            type, 
+            tutorId, 
+            student:studentObjectIds, 
+            subjectId, 
+            language
+        });
         
         const tutor = await Tutor.findById(tutorId);
 
@@ -71,9 +148,71 @@ const createSession = async (req, res) => {
     }
 }
 
-//The queue has to check if sessions are over asynchronously and has to operate at intervals
+const startIndividualSession = async (req,res) => {
+    if(!req.params.sessionId) return res.status(400)
 
-// TO-DO: get this to work
+    try{
+        const session = await IndividualSession.findById(req.params.sessionId);
+        console.log("working")
+        const currTime = Date.now();
+        session.startTime = new Date(currTime);
+        console.log("working")
+
+        
+        session.expectedEnd = new Date(currTime + (2*60*1000));
+
+        console.log("working")
+
+        await session.save();
+
+        console.log("working")
+
+        return res.status(200).json({message:"success"})
+    }
+    catch(err){
+        return res.status(500).json({message: err})
+    }
+}
+
+const getActiveGroupSessionByTable = async (req,res) => {
+    if(!req.params.tableId) return res.status(400)
+    try{
+        const {tableId} = req.params;
+
+        const activeSessions = await GroupSession.find({groupTableId: tableId, active: true}).populate('studentId').populate('subjectId');
+
+        if(!activeSessions) return res.status(404).json({message: "No sessions"})
+
+        return res.status(200).json(activeSessions);
+    }
+    catch(err){
+        console.log(err)
+        return res.status(500).json({message: err})
+    }
+}
+
+const endGroupSession = async (req,res) => {
+    if(!req.params.sessionId) return res.status(400)
+        try{
+            const {sessionId} = req.params;
+    
+            const session = await GroupSession.findById(sessionId)
+    
+            if(!session) return res.status(404).json({message: "No session found"})
+                
+            session.active = false;
+            session.endTime = Date.now();
+
+            await session.save()
+
+            return res.status(200).json({message:"Ended session"});
+        }
+        catch(err){
+            console.log(err)
+            return res.status(500).json({message: err})
+        }
+}
+//The queue has to check if sessions are over asynchronously and has to operate at intervals
 
 //To get this functionality to work I'm going to add a students in queue object to the tutors and ensure that whenever a student is added to their queue, that attribute of the tutor is populated.
 
@@ -86,11 +225,12 @@ const createSession = async (req, res) => {
 //TO-DO: Need to have functionality to update the queue in case someone doesn't show up
 //TO-DO: Need to create possibility to view the queue and remove people from the queue if they don't want to wait anymore
 const addStudentToQueue = async (req,res) => {
-    if(!req.body.tutorId || !req.body.subjectId || !req.body.studentFirstName || !req.body.studentLastName || !req.body.type) return res.status(400).json({message:"Missing Parameters"
+    if(!req.body.tutorId || !req.body.subjectId || !req.body.students || !req.body.language || !req.body.type) return res.status(400).json({message:"Missing Parameters"
     })
     try {       
-        const {studentFirstName,studentLastName,tutorId,studentId,subjectId,type} = req.body;
+        const {tutorId,subjectId,type,language} = req.body;
 
+        const students = req.body.students;
         const tutor = await Tutor.findById(tutorId);
         if(!tutor) return res.status(404).json({message: "no tutor found"});
 
@@ -99,17 +239,20 @@ const addStudentToQueue = async (req,res) => {
         if(tutor.studentsInQueue.length > 2) return res.status(500).json({message: "Queue is full"});
 
         const studentData = {
-            studentFirstName,
-            studentLastName,
-            studentId,
+            students,
             tutorId,
             subjectId,
+            language,
             type
         }
 
+        console.log(studentData);
+
         tutor.studentsInQueue.push(studentData)
 
-        await tutor.save()
+        const resp = await tutor.save();
+
+        console.log("Respone: " + JSON.stringify(resp.studentsInQueue))
 
         return res.status(200)
     }
@@ -120,18 +263,13 @@ const addStudentToQueue = async (req,res) => {
     }
 }
 
-const createSessionFromQueuedStudent = (req,res) => {
-    const studentInQueue = tutor.studentsInQueue.shift();
-}
-
-//TO-DO: Check if student is in queue after session ends
-//TO-DO: Add startTime when creating new session if someone is in queue
-const endSession = async (req, res) => {
+//End session
+const endIndividualSession = async (req, res) => {
     if(!req.params.sessionId) return res.status(400).json({message:"Missing Parameters"
     })
     try{
         const { sessionId } = req.params;
-        const session = await Session.findById(sessionId);
+        const session = await IndividualSession.findById(sessionId);
 
         console.log(session._id);
 
@@ -143,22 +281,20 @@ const endSession = async (req, res) => {
 
         if(tutor.studentsInQueue.length > 0){
             const nextStudent = tutor.studentsInQueue.shift();
-            await tutor.save()
-
+            await tutor.save();
+            console.log("Next Student: " + JSON.stringify(nextStudent))
             const modifiedReq = {
                 body:{
-                    studentFirstName: nextStudent.studentFirstName,
-                    studentLastName: nextStudent.studentLastName,
+                    students:nextStudent.students,
                     tutorId: session.tutorId,
                     subjectId: nextStudent.subjectId,
                     type: nextStudent.type,
-                    studentId: nextStudent.studentId,
-                    startTime: Date.now()
+                    language: nextStudent.language
                 }
             }
 
-            console.log("hit")
-            await createSession(modifiedReq,res);
+            console.log("Modified Request: " + JSON.stringify(modifiedReq));
+            await createIndividualSession(modifiedReq,res);
         }
 
         else{
@@ -173,11 +309,89 @@ const endSession = async (req, res) => {
     }
 }
 
+//Extend a session
+//TO-DO: Maybe add option for the session to be extended for a specific amount of time. Might be overkill though.
+const extendIndividualSession = async (req,res) => {
+    console.log("hit");
+    if(!req.params.sessionId) return res.status(400).json({message: "Bad request"});
+    try{
+
+        const {sessionId} = req.params;
+
+        const session = await IndividualSession.findById(sessionId);
+
+        session.extended = true;
+
+        if(session.paused)
+            session.paused = false;
+
+        await session.save();
+
+        return res.status(200).json({message: "Session successfully extended"})
+    }
+    catch(err){
+        console.log(err);
+        return res.status(500).json({message: "Something went wrong"});
+    }
+}
+
+const pauseIndividualSession = async (req,res) => {
+    if(!req.params.sessionId) return res.status(400).json({message:"Bad Request"})
+    
+    try{
+        const {sessionId} = req.params;
+
+        const session = await IndividualSession.findById(sessionId);
+
+        session.paused = true;
+
+        session.timePaused = Date.now();
+
+        await session.save()
+
+        return res.status(200).json({message:"Successfully Paused"})
+    }
+    catch(err){
+        return res.status(500).json({message: "Something went wrong"});
+    }
+}
+
+const resumeIndividualSession = async (req,res) => {
+    if(!req.params.sessionId) return res.status(400).json({message:"Bad Request"})
+    
+    try{
+        const {sessionId} = req.params;
+
+        const session = await IndividualSession.findById(sessionId);
+
+        session.paused = false;
+
+        const timeLeft = session.expectedEnd - session.timePaused;
+
+        session.timeResumed = Date.now();
+
+        console.log("Time Left: "+ (timeLeft/1000));
+
+        console.log("Previous end date: " + session.expectedEnd);
+        
+        const newEnd = Date.now() + timeLeft;
+        session.expectedEnd = newEnd;
+
+        console.log("Current end date: " + session.expectedEnd);
+
+        await session.save()
+
+        return res.status(200).json({endTime:newEnd})
+    }
+    catch(err){
+        return res.status(500).json({message: "Something went wrong"});
+    }
+}
 
 //Get every session that has taken place
-const getAllSessions = async (req, res) => {
+const getAllIndividualSessions = async (req, res) => {
     try{
-        const sessions = await Session.find().populate('tutorId').populate('subject').populate('student');
+        const sessions = await IndividualSession.find().populate('tutorId').populate('subject').populate('student');
 
         return res.status(200).json({ sessions });
     }
@@ -187,10 +401,10 @@ const getAllSessions = async (req, res) => {
     }
 }
 
-//Get Tutors in Sessions
-const getActiveSessions = async (req, res) => {
+//Get Tutors in IndividualSessions
+const getActiveIndividualSessions = async (req, res) => {
     try{
-        const sessions = await Session.find({ active: true }).populate('tutorId').populate('subjectId').populate('student');
+        const sessions = await IndividualSession.find({ active: true }).populate('tutorId').populate('subjectId').populate('student');
 
         return res.status(200).json({ sessions });
     }
@@ -204,10 +418,10 @@ const getActiveSessions = async (req, res) => {
 //Need to work on
 
 //Get all sessions for a certain tutor
-const getTutorSessionHistory = async (req, res) => {
+const getTutorIndividualSessionHistory = async (req, res) => {
     try{
         const { tutorId } = req.params;
-        const sessions = await Session.find({ tutor: tutorId });
+        const sessions = await IndividualSession.find({ tutor: tutorId });
 
         return res.status(200).json({ sessions });
     }
@@ -217,12 +431,12 @@ const getTutorSessionHistory = async (req, res) => {
 }
 
 //Get all sessions for a certain student
-const getStudentSessionHistory = async (req, res) => {
+const getStudentIndividualSessionHistory = async (req, res) => {
     try{
         const { studentId } = req.params;
         const studentObjId = await Student.findOne({ studentId: studentId })._id;
         
-        const sessions = await Session.find({ student: studentObjId });
+        const sessions = await IndividualSession.find({ student: studentObjId });
 
         return res.status(200).json({ sessions });
     }
@@ -232,4 +446,4 @@ const getStudentSessionHistory = async (req, res) => {
 }
 
 
-module.exports = { createSession, endSession, getAllSessions, getActiveSessions, getTutorSessionHistory, getStudentSessionHistory, addStudentToQueue };
+module.exports = { createIndividualSession,createGroupSession, pauseIndividualSession,resumeIndividualSession, startIndividualSession, endIndividualSession, extendIndividualSession, getAllIndividualSessions, getActiveIndividualSessions, getTutorIndividualSessionHistory, getStudentIndividualSessionHistory, addStudentToQueue, getActiveGroupSessionByTable, endGroupSession };
