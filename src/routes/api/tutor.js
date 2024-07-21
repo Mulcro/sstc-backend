@@ -7,11 +7,18 @@ router.route('/')
     .post(tutorController.createTutor)
     .patch(tutorController.checkInOrOut)
 
+router.route('/individualsession')
+    .post(tutorController.getTutorsInIndvlSessions)
+
+router.route('/ingroup')
+    .get(tutorController.getTutorsInGroup);
+    
 router.route('/available')
-    .post(tutorController.getAvailableTutors);
+    .get(tutorController.getAllAvailableTutors)
+    .post(tutorController.getAvailableTutorsBySubject);
 
 router.route('/clockedIn')
-    .post(tutorController.getClockedInTutors);
+    .get(tutorController.getClockedInTutors);
 
 router.route('/:id')
     .patch(tutorController.updateTutor)
