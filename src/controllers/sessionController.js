@@ -3,25 +3,29 @@ const Student = require('../models/Student');
 const IndividualSession = require('../models/IndividualSession');
 const GroupSession = require('../models/GroupSession');
 const GroupTable = require('../models/GroupTable');
+const client = require('../config/redisClient')
+
+//TO-DO: When sessions start/end they are not being timed and the session data is being read from cache. I need to force refresh the cache whenever a session is started or ended so that the data can be consistent.
+
+//PS - I just need to clear the cache when CRUD opperations take place. The refreshing of the cache will happen automatically whenever the client requests for the active sessions. In between that time the client will make direct results to the db. Data inconsistency will be avoided this way
 
 //TO-DO: Need to prevent students from being in multiple sessions at a time
 
-//Create Session
+
 const createGroupSession = async (req,res) => {
     console.log(req.body)
     if(!req.body.studentId || !req.body.groupTableId || !req.body.subjectId || !req.body.type) return res.status(400).json({message: "Bad request"})
     try{
-        const {firstName,lastName,studentId,groupTableId,subjectId,type,language} = req.body;
-        
-        let student = await Student.findOne({ studentId });
-        // Check if student exists; if not, create and save
-            //Went through the hassle of doing this so I can query sessions by student if ever needed
-        if(student){
-            const isStudentInIndividualSession = await IndividualSession.find({student: student._id});
-            const isStudentInGroupSession = await GroupSession.find({studentId: student._id});
+    const {firstName,lastName,studentId,groupTableId,subjectId,type,language} = req.body;
 
-            if(isStudentInGroupSession && isStudentInIndividualSession){
-                console.log("Student in Session: " + (isStudentInGroupSession && isStudentInIndividualSession));
+    let student = await Student.findOne({ studentId });
+    // Check if student exists; if not, create and save
+    //Went through the hassle of doing this so I can query sessions by student if ever needed
+    if(student){
+            const isStudentInIndividualSession = await IndividualSession.find({student: student._id, active:true});
+            const isStudentInGroupSession = await GroupSession.find({studentId: student._id, active:true});
+            
+            if((JSON.stringify(isStudentInIndividualSession) !== '[]') || (JSON.stringify(isStudentInGroupSession) !== '[]')){
                 return res.status(409).json({message: "Student is in Session"})
             }
         }
@@ -31,16 +35,16 @@ const createGroupSession = async (req,res) => {
                 lastName,
                 studentId
             });
-
+            
             const savedStudent = await createdStudent.save();
-
+            
             if (!savedStudent) {
                 return res.status(500).send("Failed to save student");
             }
-
+            
             student = savedStudent;
         }
-
+        
         const groupSession = await GroupSession.create({
             studentId: student._id,
             groupTableId,
@@ -52,6 +56,9 @@ const createGroupSession = async (req,res) => {
         
         await groupSession.save();
 
+        //clear cache
+        await client.del(`groupSessions:${groupSession.groupTableId}`);
+        
         return res.status(200).json(groupSession)
         
     }
@@ -61,9 +68,57 @@ const createGroupSession = async (req,res) => {
     }
 }
 
-//TO-DO: Need functionality for group sessions
+const getActiveGroupSessionByTable = async (req,res) => {  
+    const {tableId} = req.params; 
+    if(!tableId) return res.status(400);
 
-//TO-DO: Need to add ability to be able to read array of users for session with multiple students.
+    try{
+        let sessions = await client.get(`groupSessions:${tableId}`);
+
+        if(sessions){
+            return res.json(JSON.parse(sessions));
+        }
+        else{
+            sessions = await GroupSession.find({groupTableId: tableId, active: true}).populate('studentId').populate('subjectId');
+    
+            if(!sessions) return res.status(404).json({message: "No sessions"})
+            
+            await client.setEx(`groupSessions:${tableId}`,120,JSON.stringify(sessions))
+
+            return res.status(200).json(sessions)
+        };
+    }
+    catch(err){
+        console.log(err)
+        return res.status(500).json({message: err})
+    }
+}
+
+const endGroupSession = async (req,res) => {
+    if(!req.params.sessionId) return res.status(400)
+        try{
+            const {sessionId} = req.params;
+    
+            const session = await GroupSession.findById(sessionId)
+            console.log(`Session: ${session.groupTableId}`);
+            if(!session) return res.status(404).json({message: "No session found"})
+                
+            session.active = false;
+            session.endTime = Date.now();
+
+            await session.save()
+
+            //clear cache
+            await client.del(`groupSessions:${session.groupTableId}`);
+
+            return res.status(200).json({message:"Ended session"});
+        }
+        catch(err){
+            console.log(err)
+            return res.status(500).json({message: err})
+        }
+}
+
 const createIndividualSession = async (req, res) => {
     console.log('Req body: ' + req.body)
     if(!req.body.students || !req.body.tutorId || !req.body.subjectId || !req.body.type || !req.body.language) return res.status(400).json({message:"Missing Parameters"
@@ -120,7 +175,6 @@ const createIndividualSession = async (req, res) => {
             }
         }
     
-        console.log(`Student Object Ids: ${studentObjectIds}`)
         const session = await IndividualSession.create({ 
             type, 
             tutorId, 
@@ -129,18 +183,20 @@ const createIndividualSession = async (req, res) => {
             language
         });
         
+        //update cache
+        //Arguement type error for some reason here
+        // await updateRedisCache(session._id, session)
+        
+        await client.del("individualSessions");
         const tutor = await Tutor.findById(tutorId);
 
         if(!tutor) return res.status(404).json({message: "user doesn't exist"})
-
+        
         tutor.isAvailable = false;   
         await tutor.save()
 
         await session.save();
-
-        console.log("new session created");
         
-        return res.status(201).json({ session });
     }
     catch(err){
         console.log(err._message)
@@ -148,70 +204,6 @@ const createIndividualSession = async (req, res) => {
     }
 }
 
-const startIndividualSession = async (req,res) => {
-    if(!req.params.sessionId) return res.status(400)
-
-    try{
-        const session = await IndividualSession.findById(req.params.sessionId);
-        console.log("working")
-        const currTime = Date.now();
-        session.startTime = new Date(currTime);
-        console.log("working")
-
-        
-        session.expectedEnd = new Date(currTime + (2*60*1000));
-
-        console.log("working")
-
-        await session.save();
-
-        console.log("working")
-
-        return res.status(200).json({message:"success"})
-    }
-    catch(err){
-        return res.status(500).json({message: err})
-    }
-}
-
-const getActiveGroupSessionByTable = async (req,res) => {
-    if(!req.params.tableId) return res.status(400)
-    try{
-        const {tableId} = req.params;
-
-        const activeSessions = await GroupSession.find({groupTableId: tableId, active: true}).populate('studentId').populate('subjectId');
-
-        if(!activeSessions) return res.status(404).json({message: "No sessions"})
-
-        return res.status(200).json(activeSessions);
-    }
-    catch(err){
-        console.log(err)
-        return res.status(500).json({message: err})
-    }
-}
-
-const endGroupSession = async (req,res) => {
-    if(!req.params.sessionId) return res.status(400)
-        try{
-            const {sessionId} = req.params;
-    
-            const session = await GroupSession.findById(sessionId)
-    
-            if(!session) return res.status(404).json({message: "No session found"})
-                
-            session.active = false;
-            session.endTime = Date.now();
-
-            await session.save()
-
-            return res.status(200).json({message:"Ended session"});
-        }
-        catch(err){
-            console.log(err)
-            return res.status(500).json({message: err})
-        }
-}
 //The queue has to check if sessions are over asynchronously and has to operate at intervals
 
 //To get this functionality to work I'm going to add a students in queue object to the tutors and ensure that whenever a student is added to their queue, that attribute of the tutor is populated.
@@ -263,7 +255,33 @@ const addStudentToQueue = async (req,res) => {
     }
 }
 
-//End session
+const startIndividualSession = async (req,res) => {
+    if(!req.params.sessionId) return res.status(400)
+
+    try{
+        const session = await IndividualSession.findById(req.params.sessionId);
+        console.log("working")
+        const currTime = Date.now();
+        session.startTime = new Date(currTime);
+        console.log("working")
+
+        
+        session.expectedEnd = new Date(currTime + (2*60*1000));
+
+        console.log("working")
+
+        await session.save();
+        
+        //Clear Cache
+        await client.del("individualSessions")
+        
+        return res.status(200).json({message:"success"})
+    }
+    catch(err){
+        return res.status(500).json({message: err})
+    }
+}
+
 const endIndividualSession = async (req, res) => {
     if(!req.params.sessionId) return res.status(400).json({message:"Missing Parameters"
     })
@@ -300,6 +318,10 @@ const endIndividualSession = async (req, res) => {
         else{
             tutor.isAvailable = true;
             await tutor.save();
+            
+            //Clear cache
+            await client.del('individualSessions');
+
             return res.status(200).json({ session });
         }
     }
@@ -327,6 +349,9 @@ const extendIndividualSession = async (req,res) => {
 
         await session.save();
 
+        //Clear Cache
+        await client.del("individualSessions");
+
         return res.status(200).json({message: "Session successfully extended"})
     }
     catch(err){
@@ -348,6 +373,9 @@ const pauseIndividualSession = async (req,res) => {
         session.timePaused = Date.now();
 
         await session.save()
+       
+        //Clear Cache
+        await client.del("individualSessions")
 
         return res.status(200).json({message:"Successfully Paused"})
     }
@@ -381,6 +409,9 @@ const resumeIndividualSession = async (req,res) => {
 
         await session.save()
 
+        //Clear Cache
+        await client.del("individualSessions")
+
         return res.status(200).json({endTime:newEnd})
     }
     catch(err){
@@ -402,11 +433,23 @@ const getAllIndividualSessions = async (req, res) => {
 }
 
 //Get Tutors in IndividualSessions
+// Redis Cache is initiallized here since this is the first controller ran when the app is initialized
 const getActiveIndividualSessions = async (req, res) => {
     try{
-        const sessions = await IndividualSession.find({ active: true }).populate('tutorId').populate('subjectId').populate('student');
+        let sessions = await client.get('individualSessions');
 
-        return res.status(200).json({ sessions });
+        if(sessions){
+            // console.log("Cache hit for individual Sessions")
+            // console.log(typeof JSON.parse(sessions))
+            return res.json(JSON.parse(sessions));
+        }
+        else{
+            console.log("Cache NOT hit for individual Sessions")
+            sessions = await IndividualSession.find({ active: true }).populate('tutorId').populate('subjectId').populate('student');
+
+            await client.setEx('individualSessions',120,JSON.stringify(sessions))
+            return res.status(200).json(sessions)
+        }
     }
     catch(err){
         console.log(err);
