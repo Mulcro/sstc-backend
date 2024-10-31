@@ -4,7 +4,8 @@
   "description": "backend for sstc app",
   "main": "index.js",
   "scripts": {
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "start": "nodemon index.js"
   },
   "repository": {
     "type": "git",
