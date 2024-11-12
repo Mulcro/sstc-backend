@@ -1,5 +1,7 @@
 FROM node:22.11.0
 
+USER root
+
 # Install Redis
 RUN apt-get update && apt-get install -y redis-server
 
@@ -11,10 +13,9 @@ COPY package*.json ./
 
 RUN npm install
 
-EXPOSE 5000
-
 # Expose Redis port
+EXPOSE 5000
 EXPOSE 6379
 
 # Start Redis and Node.js app
-CMD service redis-server start && npm run start
+CMD ["./start.sh"]
