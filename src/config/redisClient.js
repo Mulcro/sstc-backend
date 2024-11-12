@@ -1,16 +1,36 @@
-const redis = require('redis');
-const client = redis.createClient();
+const redis = require(process.env.NODE_ENV === 'test' ? 'redis-mock' : 'redis');
 
-// client.connect(); 
+let client;
 
-(async () => {
-  await client.connect();
-})();
+if (process.env.NODE_ENV === 'test') {
+  client = redis.createClient();
+}
+else {
+  //  If in production use redis url provided by heroku's redis service
+  const redisOptions = process.env.REDIS_URL 
+    ? 
+      { url: process.env.REDIS_URL }
+    :
+      {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: process.env.REDIS_PORT || 6379
+      }
 
-client.on('error', (err) => {
-  console.error('Redis error:', err);
-});
+  client = redis.createClient(redisOptions);
 
-client.on('Connect', () => console.log("Connected"))
+  client.on('error', (err) => {
+    console.error('Redis error:', err);
+  });
+
+  client.on('connect', () => console.log("Connected"))
+
+}
+
+// Call connect if the method exists (for Redis v4 clients)
+if (typeof client.connect === 'function') {
+  (async () => {
+    await client.connect();
+  })();
+}
 
 module.exports = client;

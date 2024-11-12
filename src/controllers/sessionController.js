@@ -13,7 +13,6 @@ const client = require('../config/redisClient')
 
 
 const createGroupSession = async (req,res) => {
-    console.log(req.body)
     if(!req.body.studentId || !req.body.groupTableId || !req.body.subjectId || !req.body.type) return res.status(400).json({message: "Bad request"})
     try{
     const {firstName,lastName,studentId,groupTableId,subjectId,type,language} = req.body;
@@ -83,7 +82,7 @@ const getActiveGroupSessionByTable = async (req,res) => {
     
             if(!sessions) return res.status(404).json({message: "No sessions"})
             
-            await client.setEx(`groupSessions:${tableId}`,120,JSON.stringify(sessions))
+            await client.setex(`groupSessions:${tableId}`,120,JSON.stringify(sessions))
 
             return res.status(200).json(sessions)
         };
@@ -100,7 +99,6 @@ const endGroupSession = async (req,res) => {
             const {sessionId} = req.params;
     
             const session = await GroupSession.findById(sessionId)
-            console.log(`Session: ${session.groupTableId}`);
             if(!session) return res.status(404).json({message: "No session found"})
                 
             session.active = false;
@@ -120,20 +118,18 @@ const endGroupSession = async (req,res) => {
 }
 
 const createIndividualSession = async (req, res) => {
-    console.log('Req body: ' + req.body)
     if(!req.body.students || !req.body.tutorId || !req.body.subjectId || !req.body.type || !req.body.language) return res.status(400).json({message:"Missing Parameters"
     })
     try{
         const studentArr = req.body.students
         const {tutorId} = req.body;
 
-        console.log("Students: " + JSON.stringify(studentArr))
         const tutorInSession = await IndividualSession.findOne({tutorId:tutorId, active: true});
 
 
         if(tutorInSession) return res.status(409).json({message: "Tutor already in session"});
 
-        const {subjectId, studentFirstName, type, studentLastName, language} = req.body;
+        const {subjectId, type, language} = req.body;
 
         let studentIdArr = [];
         studentArr.forEach((obj) => {
@@ -193,9 +189,10 @@ const createIndividualSession = async (req, res) => {
         if(!tutor) return res.status(404).json({message: "user doesn't exist"})
         
         tutor.isAvailable = false;   
-        await tutor.save()
-
+        await tutor.save();
         await session.save();
+
+        return res.status(201)
         
     }
     catch(err){
@@ -238,13 +235,9 @@ const addStudentToQueue = async (req,res) => {
             type
         }
 
-        console.log(studentData);
-
         tutor.studentsInQueue.push(studentData)
 
         const resp = await tutor.save();
-
-        console.log("Respone: " + JSON.stringify(resp.studentsInQueue))
 
         return res.status(200)
     }
@@ -260,15 +253,11 @@ const startIndividualSession = async (req,res) => {
 
     try{
         const session = await IndividualSession.findById(req.params.sessionId);
-        console.log("working")
         const currTime = Date.now();
         session.startTime = new Date(currTime);
-        console.log("working")
 
         
         session.expectedEnd = new Date(currTime + (2*60*1000));
-
-        console.log("working")
 
         await session.save();
         
@@ -289,8 +278,6 @@ const endIndividualSession = async (req, res) => {
         const { sessionId } = req.params;
         const session = await IndividualSession.findById(sessionId);
 
-        console.log(session._id);
-
         session.actualEnd = Date.now();
         session.active = false;
         await session.save();
@@ -300,7 +287,6 @@ const endIndividualSession = async (req, res) => {
         if(tutor.studentsInQueue.length > 0){
             const nextStudent = tutor.studentsInQueue.shift();
             await tutor.save();
-            console.log("Next Student: " + JSON.stringify(nextStudent))
             const modifiedReq = {
                 body:{
                     students:nextStudent.students,
@@ -311,7 +297,6 @@ const endIndividualSession = async (req, res) => {
                 }
             }
 
-            console.log("Modified Request: " + JSON.stringify(modifiedReq));
             await createIndividualSession(modifiedReq,res);
         }
 
@@ -334,7 +319,6 @@ const endIndividualSession = async (req, res) => {
 //Extend a session
 //TO-DO: Maybe add option for the session to be extended for a specific amount of time. Might be overkill though.
 const extendIndividualSession = async (req,res) => {
-    console.log("hit");
     if(!req.params.sessionId) return res.status(400).json({message: "Bad request"});
     try{
 
@@ -397,15 +381,9 @@ const resumeIndividualSession = async (req,res) => {
         const timeLeft = session.expectedEnd - session.timePaused;
 
         session.timeResumed = Date.now();
-
-        console.log("Time Left: "+ (timeLeft/1000));
-
-        console.log("Previous end date: " + session.expectedEnd);
         
         const newEnd = Date.now() + timeLeft;
         session.expectedEnd = newEnd;
-
-        console.log("Current end date: " + session.expectedEnd);
 
         await session.save()
 
@@ -439,15 +417,12 @@ const getActiveIndividualSessions = async (req, res) => {
         let sessions = await client.get('individualSessions');
 
         if(sessions){
-            // console.log("Cache hit for individual Sessions")
-            // console.log(typeof JSON.parse(sessions))
             return res.json(JSON.parse(sessions));
         }
         else{
-            console.log("Cache NOT hit for individual Sessions")
             sessions = await IndividualSession.find({ active: true }).populate('tutorId').populate('subjectId').populate('student');
 
-            await client.setEx('individualSessions',120,JSON.stringify(sessions))
+            await client.setex('individualSessions',120,JSON.stringify(sessions))
             return res.status(200).json(sessions)
         }
     }
