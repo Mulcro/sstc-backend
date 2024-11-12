@@ -21,7 +21,7 @@ describe('Tests subject functionality', () => {
                 useNewUrlParser: true,
                 useUnifiedTopology: true,
             });
-            console.log('Connected to MongoDB database');
+            // console.log('Connected to MongoDB database');
 
             await Subject.deleteMany({});
 
@@ -42,13 +42,13 @@ describe('Tests subject functionality', () => {
             // Ensure all operations are completed before disconnecting
             // await new Promise(resolve => setTimeout(resolve, 1000));
             await mongoose.disconnect();
-            console.log('Disconnected from MongoDB database');
+            // console.log('Disconnected from MongoDB database');
 
             const activeHandles = process._getActiveHandles();
             const activeRequests = process._getActiveRequests();
 
             // console.log('Active Handles:', activeHandles);
-            console.log('Active Requests:', activeRequests);
+            // console.log('Active Requests:', activeRequests);
         } catch (err) {
             console.error('Error disconnecting from database:', err);
         }

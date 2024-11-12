@@ -1,22 +1,11 @@
 const mongoose = require("mongoose");
 require('dotenv').config();
 const Tutor = require('../models/Tutor');
-const {
-    createTutor,
-    getAvailableTutors,
-    getAllTutors,
-    checkInOrOut,
-    updateTutor,
-    deleteTutor
-} = require('../controllers/tutorController');
+const {createLanguage, getLanguages} = require('../controllers/languageController');
 
 const mockReq = {
     body: {
-        firstName : "John",
-        lastName: "Doe",
-        subjects: "665ff60c7e905fd56200c00f",
-        studentId: "00000", 
-        shifts: []
+        name: "Japanese"
     }
 }
 
@@ -25,21 +14,27 @@ const mockRes = {
     json: jest.fn()
 };
 
-describe('test tutor functionalities', () => {
+describe('Create & Get Language', () => {
     beforeAll(async () => {
         try {
             await mongoose.connect(process.env.MONGO_TEST_URI, {
                 useNewUrlParser: true,
                 useUnifiedTopology: true,
             });
+            // console.log('Connected to MongoDB database');
         } catch (err) {
             console.log('Error connecting to database:', err);
         }
     });
 
-    it('Successfully creates a tutor', async () => {
-        await createTutor(mockReq,mockRes);
+    it('Successfully creates a language', async () => {
+        await createLanguage(mockReq,mockRes);
         expect(mockRes.status).toHaveBeenLastCalledWith(201);
+        expect(mockRes.json).toHaveBeenCalled();
+    })
+
+    it('Get all languages', async () => {
+        await getLanguages(mockReq,mockRes);
         expect(mockRes.json).toHaveBeenCalled();
     })
 
