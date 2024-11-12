@@ -22,18 +22,6 @@ app.use(express.json());
 //middleware for cookie
 app.use(cookieParser());
 
-// app.use((req, res, next) => {
-//     if(req.url === '/sessions/active')
-//         next();
-//     else if(req.url === '/grouptables'){
-//         next();
-//     }
-//     else{
-//         console.log(`${req.method} request for '${req.url} from ${req.get('origin')}'`);
-//         next();
-//     }
-// });
-
 
 app.use('/subjects',require('./src/routes/api/subject'));
 app.use('/tutors',require('./src/routes/api/tutor'));
