@@ -22,5 +22,20 @@ const getLanguages = async (req,res) => {
     }
 }
 
+const createLanguage = async (req,res) => {
+    const language = new Languages({
+        name: req.body.name
+    });
 
-module.exports = {getLanguages};
+    try{
+        const newLanguage = await language.save();
+        res.status(201).json(newLanguage);
+    }
+    catch(err){
+        res.status(400).json({message: err.message});
+    }
+}
+
+
+
+module.exports = {getLanguages,createLanguage};

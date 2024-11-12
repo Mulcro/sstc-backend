@@ -5,11 +5,8 @@ const GroupTable = require('../models/GroupTable');
 const createTutor = async (req, res) => {
     try{
         const { firstName, lastName, subjects,studentId, shifts } = req.body;
-        console.log(req.body)
         
         const tutor = await Tutor.create({ firstName, lastName, studentId, subjects, shifts });
-
-        console.log("working")
 
         await tutor.save();
 
@@ -164,7 +161,6 @@ const updateTutor = async (req, res) => {
 
 //TO-DO: Delete tutors students in queue after they check out
 const checkInOrOut = async (req, res) => {
-    console.log("hit")
     const option = parseInt(req.body.option);
 
     switch(option){
