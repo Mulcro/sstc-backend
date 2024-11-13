@@ -13,6 +13,9 @@ COPY package*.json ./
 
 RUN npm install
 
+# Ensure start.sh is executable
+RUN chmod +x start.sh
+
 # Expose Redis port
 EXPOSE 5000
 EXPOSE 6379
