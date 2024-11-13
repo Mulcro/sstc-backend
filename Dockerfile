@@ -18,4 +18,4 @@ EXPOSE 5000
 EXPOSE 6379
 
 # Start Redis and Node.js app
-CMD ["./start.sh"]
+CMD ["sh", "-c", "./start.sh"]
