@@ -82,7 +82,7 @@ const getActiveGroupSessionByTable = async (req,res) => {
     
             if(!sessions) return res.status(404).json({message: "No sessions"})
             
-            await client.setex(`groupSessions:${tableId}`,120,JSON.stringify(sessions))
+            await client.setEx(`groupSessions:${tableId}`,120,JSON.stringify(sessions))
 
             return res.status(200).json(sessions)
         };
@@ -422,7 +422,7 @@ const getActiveIndividualSessions = async (req, res) => {
         else{
             sessions = await IndividualSession.find({ active: true }).populate('tutorId').populate('subjectId').populate('student');
 
-            await client.setex('individualSessions',120,JSON.stringify(sessions))
+            await client.setEx('individualSessions',120,JSON.stringify(sessions))
             return res.status(200).json(sessions)
         }
     }
