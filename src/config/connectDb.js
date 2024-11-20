@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const connectDb = async () => {
 
     try{
-        // Set prod and testing mongo uri in github repo env secrets
+        // Set prod and testing mongo uri in heroku app config vars
         await mongoose.connect(process.env.MONGO_URI, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
