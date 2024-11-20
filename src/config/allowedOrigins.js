@@ -7,7 +7,7 @@ const allowedOrigins = [
     'http://localhost:4000',
     'http://127.0.0.1:4173',
     "https://web.postman.co",
-    "https://sstc-front-a468dc2fcd25.herokuapp.com/"
+    "https://sstc-front-a468dc2fcd25.herokuapp.com"
 ];
 
 module.exports = allowedOrigins;
